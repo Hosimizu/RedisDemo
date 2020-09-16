@@ -25,6 +25,54 @@ public class ArticleApp {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+
+    //使用编程式事务
+    public void addArticleTransation(String userId) {
+
+        // 定义发布文章：编号、标题、内容、创建人 Hash
+        HashMap<String, String> map = new HashMap<String, String>();
+        //文章id，自增长，如果 key 不存在，那么 key 的值会先被初始化为 0 ，然后再执行 INCR 操作。
+        long articleId = stringRedisTemplate.opsForValue().increment("article:");
+        map.put("title", "文章标题->" + articleId);
+        map.put("content", "文章内容->" + articleId);
+        map.put("user_id", userId);
+        map.put("create_time", getCurrentDate());
+
+        stringRedisTemplate.execute(new SessionCallback() {
+            @Override
+            public Object execute(RedisOperations redisOperations) throws DataAccessException {
+                //显示开启事务
+                redisOperations.multi();
+                stringRedisTemplate.opsForHash().putAll("article:" + articleId, map);
+                // 给自己投一票 Set
+                stringRedisTemplate.opsForSet().add("vote:" + articleId, userId);
+                // 给自己+10分 ZSet
+                stringRedisTemplate.opsForZSet().add("score", articleId + "", 10);
+                return redisOperations.exec();
+            }
+        });
+        printArticle(articleId);
+    }
+
+    //使用注解式事务
+    @Transactional
+    public void addArticleAutoTransation(String userId) {
+        // 定义发布文章：编号、标题、内容、创建人 Hash
+        HashMap<String, String> map = new HashMap<String, String>();
+        //文章id，自增长，如果 key 不存在，那么 key 的值会先被初始化为 0 ，然后再执行 INCR 操作。
+        long articleId = stringRedisTemplate.opsForValue().increment("article:");
+        map.put("title", "文章标题->" + articleId);
+        map.put("content", "文章内容->" + articleId);
+        map.put("user_id", userId);
+        map.put("create_time", getCurrentDate());
+        stringRedisTemplate.opsForHash().putAll("article:" + articleId, map);
+
+        // 给自己投一票 Set
+        stringRedisTemplate.opsForSet().add("vote:" + articleId, userId);
+        // 给自己+10分 ZSet
+        stringRedisTemplate.opsForZSet().add("score", articleId + "", 10);
+        printArticle(articleId);
+    }
     /**
      * 发表文章
      * 逻辑：
